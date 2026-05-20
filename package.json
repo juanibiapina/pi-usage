@@ -1,0 +1,37 @@
+{
+  "name": "@juanibiapina/pi-usage",
+  "version": "0.1.0",
+  "description": "Pi extension that fetches Anthropic subscription usage. Simplified fork of @marckrenn/pi-sub-core.",
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test --import tsx test/*.test.ts",
+    "check": "biome check --write --error-on-warnings . && tsc --noEmit"
+  },
+  "author": "Juan Ibiapina",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/juanibiapina/pi-usage"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.15",
+    "@earendil-works/pi-coding-agent": "^0.75.3",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}
