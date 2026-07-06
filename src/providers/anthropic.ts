@@ -42,6 +42,20 @@ function loadClaudeToken(deps: Dependencies): string | undefined {
 		// Keychain access failed
 	}
 
+	// Try Claude Code credentials file (Linux/Windows)
+	const claudeCredsPath = path.join(deps.homedir(), ".claude", ".credentials.json");
+	try {
+		if (deps.fileExists(claudeCredsPath)) {
+			const data = JSON.parse(deps.readFile(claudeCredsPath) ?? "{}");
+			const scopes = data.claudeAiOauth?.scopes || [];
+			if (scopes.includes("user:profile") && data.claudeAiOauth?.accessToken) {
+				return data.claudeAiOauth.accessToken;
+			}
+		}
+	} catch {
+		// Ignore parse errors
+	}
+
 	return undefined;
 }
 
