@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] - 2026-07-15
+
+### Added
+
+- Read Claude Code credentials from `~/.claude/.credentials.json`, adding auth support on Linux and Windows
+
 ## [0.1.0] - 2026-05-20
 
 ### Added
