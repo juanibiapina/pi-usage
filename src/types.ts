@@ -6,7 +6,7 @@
 
 import type { ExecFileSyncOptionsWithStringEncoding } from "child_process";
 
-export const PROVIDERS = ["anthropic", "copilot", "gemini", "antigravity", "codex", "kiro", "zai"] as const;
+export const PROVIDERS = ["anthropic", "copilot", "gemini", "antigravity", "codex", "kiro", "zai", "xai"] as const;
 
 export type ProviderName = (typeof PROVIDERS)[number];
 

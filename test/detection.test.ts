@@ -57,6 +57,18 @@ test("detects z.ai by provider", () => {
 	assert.equal(detectProvider({ provider: "z.ai", id: "model" }), "zai");
 });
 
+test("detects xAI by provider", () => {
+	assert.equal(detectProvider({ provider: "xai", id: "grok-4.5" }), "xai");
+});
+
+test("detects xAI by model token when provider missing", () => {
+	assert.equal(detectProvider({ id: "grok-4.5" }), "xai");
+});
+
+test("does not map xai provider token to z.ai", () => {
+	assert.equal(detectProvider({ provider: "xai", id: "anything" }), "xai");
+});
+
 // Edge cases
 test("returns undefined for unknown provider", () => {
 	assert.equal(detectProvider({ provider: "unknown-provider", id: "unknown-model" }), undefined);

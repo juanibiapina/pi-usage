@@ -1,6 +1,6 @@
 # pi-usage
 
-Pi extension that fetches subscription usage for all supported providers (Anthropic, Copilot, Gemini, Antigravity, Codex, Kiro, z.ai).
+Pi extension that fetches subscription usage for all supported providers (Anthropic, Copilot, Gemini, Antigravity, Codex, Kiro, z.ai, xAI/Grok).
 
 Simplified fork of the excellent [@marckrenn/pi-sub-core](https://github.com/marckrenn/pi-sub). Keeps all providers, applies two bug fixes, drops features we don't need.
 

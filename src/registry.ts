@@ -9,6 +9,7 @@ import { CodexProvider } from "./providers/codex.js";
 import { CopilotProvider } from "./providers/copilot.js";
 import { GeminiProvider } from "./providers/gemini.js";
 import { KiroProvider } from "./providers/kiro.js";
+import { XaiProvider } from "./providers/xai.js";
 import { ZaiProvider } from "./providers/zai.js";
 import type { Dependencies, ProviderName } from "./types.js";
 
@@ -20,6 +21,7 @@ const FACTORIES: Record<ProviderName, () => UsageProvider> = {
 	codex: () => new CodexProvider(),
 	kiro: () => new KiroProvider(),
 	zai: () => new ZaiProvider(),
+	xai: () => new XaiProvider(),
 };
 
 export function createProvider(name: ProviderName): UsageProvider {

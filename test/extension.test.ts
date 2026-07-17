@@ -92,6 +92,18 @@ test("detects copilot provider", async () => {
 	assert.equal(state.provider, "copilot");
 });
 
+test("detects xai provider", async () => {
+	const { pi, emitted, fireLifecycle } = createPi();
+	createExtension(pi as any, createMockDeps());
+	emitted.length = 0;
+
+	await fireLifecycle("session_start", { model: { provider: "xai", id: "grok-4.5" } });
+
+	const updates = usageCoreUpdates(emitted);
+	const state = updates[updates.length - 1].payload.state as UsageCoreState;
+	assert.equal(state.provider, "xai");
+});
+
 test("emits ready event on session_start", async () => {
 	const { pi, emitted, fireLifecycle } = createPi();
 	createExtension(pi as any, createMockDeps());
