@@ -1,6 +1,6 @@
 {
   "name": "@juanibiapina/pi-usage",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pi extension that fetches Anthropic subscription usage. Simplified fork of @marckrenn/pi-sub-core.",
   "type": "module",
   "keywords": [
