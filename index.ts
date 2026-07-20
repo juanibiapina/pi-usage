@@ -2,7 +2,7 @@
  * pi-usage — Subscription usage extension for all providers.
  *
  * Simplified fork of @marckrenn/pi-sub-core (https://github.com/marckrenn/pi-sub).
- * Supports all providers (anthropic, copilot, gemini, antigravity, codex, kiro, zai)
+ * Supports all providers (anthropic, copilot, gemini, antigravity, codex, kiro, zai, xai)
  * with two bug fixes:
  *
  * 1. Bedrock false positive: detection no longer falls back to model tokens when

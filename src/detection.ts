@@ -22,7 +22,9 @@ const DETECTION_HINTS: DetectionHint[] = [
 	{ provider: "antigravity", providerTokens: ["antigravity"], modelTokens: ["antigravity"] },
 	{ provider: "codex", providerTokens: ["openai", "codex"], modelTokens: ["gpt", "o1", "o3"] },
 	{ provider: "kiro", providerTokens: ["kiro", "aws"], modelTokens: [] },
-	{ provider: "zai", providerTokens: ["zai", "z.ai", "xai"], modelTokens: [] },
+	// xAI/Grok must be checked before z.ai so provider "xai" is not misclassified.
+	{ provider: "xai", providerTokens: ["xai"], modelTokens: ["grok"] },
+	{ provider: "zai", providerTokens: ["zai", "z.ai"], modelTokens: [] },
 ];
 
 export function detectProvider(model: { provider?: string; id?: string } | undefined): ProviderName | undefined {
