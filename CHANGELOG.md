@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2026-07-20
+
+### Added
+
+- xAI/Grok SuperGrok usage: shows SuperGrok monthly credits and the weekly usage pool, and detects Grok models correctly
+
 ## [0.2.0] - 2026-07-15
 
 ### Added
