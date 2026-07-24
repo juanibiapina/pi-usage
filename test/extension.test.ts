@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import createExtension from "../index.js";
+import { createCache } from "../src/cache.js";
 import type { Dependencies, UsageCoreState } from "../src/types.js";
 
 function createPi() {
@@ -17,9 +21,7 @@ function createPi() {
 			},
 			emit(event: string, payload: any) {
 				emitted.push({ event, payload });
-				for (const handler of listeners.get(event) ?? []) {
-					handler(payload);
-				}
+				for (const handler of listeners.get(event) ?? []) handler(payload);
 			},
 		},
 		on(event: string, handler: (event: any, ctx: any) => Promise<void>) {
@@ -29,10 +31,8 @@ function createPi() {
 		},
 	};
 
-	async function fireLifecycle(event: string, ctx: any) {
-		for (const handler of lifecycleListeners.get(event) ?? []) {
-			await handler({}, ctx);
-		}
+	async function fireLifecycle(event: string, ctx: any = {}) {
+		for (const handler of lifecycleListeners.get(event) ?? []) await handler({}, ctx);
 	}
 
 	return { pi, emitted, fireLifecycle };
@@ -50,63 +50,95 @@ function createMockDeps(overrides?: Partial<Dependencies>): Dependencies {
 	};
 }
 
+async function createTestExtension(t: test.TestContext, deps = createMockDeps(), initialNow = 0) {
+	const dir = await mkdtemp(join(tmpdir(), "pi-usage-extension-"));
+	let currentNow = initialNow;
+	const cache = createCache({ dir, now: () => currentNow });
+	const extension = createPi();
+	createExtension(extension.pi as any, deps, cache);
+	t.after(async () => {
+		await extension.fireLifecycle("session_shutdown");
+		await rm(dir, { recursive: true, force: true });
+	});
+	return {
+		...extension,
+		advance: (milliseconds: number) => {
+			currentNow += milliseconds;
+		},
+		cache,
+	};
+}
+
 function usageCoreUpdates(emitted: Array<{ event: string; payload: any }>) {
 	return emitted.filter((e) => e.event === "usage-core:update-current" || e.event === "usage-core:ready");
 }
 
-test("emits no provider for non-matching model", async () => {
-	const { pi, emitted, fireLifecycle } = createPi();
-	createExtension(pi as any, createMockDeps());
+function anthropicDeps(onFetch: () => void): Dependencies {
+	return createMockDeps({
+		fetch: async () => {
+			onFetch();
+			return new Response(
+				JSON.stringify({
+					five_hour: { utilization: 10, resets_at: new Date(Date.now() + 3_600_000).toISOString() },
+					seven_day: { utilization: 20, resets_at: new Date(Date.now() + 86_400_000).toISOString() },
+				}),
+				{ status: 200 },
+			);
+		},
+		fileExists: (p: string) => p.includes("auth.json"),
+		readFile: (p: string) =>
+			p.includes("auth.json") ? JSON.stringify({ anthropic: { access: "test-token" } }) : undefined,
+	});
+}
+
+test("emits no provider for non-matching model", async (t) => {
+	const { emitted, fireLifecycle } = await createTestExtension(t);
 	emitted.length = 0;
 
 	await fireLifecycle("session_start", { model: { provider: "bedrock", id: "claude-sonnet-4" } });
 
 	const updates = usageCoreUpdates(emitted);
 	assert.ok(updates.length > 0);
-	const state = updates[updates.length - 1].payload.state as UsageCoreState;
+	const state = updates.at(-1)!.payload.state as UsageCoreState;
 	assert.equal(state.provider, undefined);
 });
 
-test("detects anthropic provider", async () => {
-	const { pi, emitted, fireLifecycle } = createPi();
-	createExtension(pi as any, createMockDeps());
+test("detects anthropic provider", async (t) => {
+	const { emitted, fireLifecycle } = await createTestExtension(t);
 	emitted.length = 0;
 
 	await fireLifecycle("session_start", { model: { provider: "anthropic", id: "claude-sonnet-4" } });
 
 	const updates = usageCoreUpdates(emitted);
 	assert.ok(updates.length > 0);
-	const state = updates[updates.length - 1].payload.state as UsageCoreState;
+	const state = updates.at(-1)!.payload.state as UsageCoreState;
 	assert.equal(state.provider, "anthropic");
 });
 
-test("detects copilot provider", async () => {
-	const { pi, emitted, fireLifecycle } = createPi();
-	createExtension(pi as any, createMockDeps());
+test("detects copilot provider", async (t) => {
+	const { emitted, fireLifecycle } = await createTestExtension(t);
 	emitted.length = 0;
 
 	await fireLifecycle("session_start", { model: { provider: "github", id: "copilot-model" } });
 
 	const updates = usageCoreUpdates(emitted);
-	const state = updates[updates.length - 1].payload.state as UsageCoreState;
+	const state = updates.at(-1)!.payload.state as UsageCoreState;
 	assert.equal(state.provider, "copilot");
 });
 
-test("detects xai provider", async () => {
-	const { pi, emitted, fireLifecycle } = createPi();
-	createExtension(pi as any, createMockDeps());
+test("detects xai provider", async (t) => {
+	const { emitted, fireLifecycle } = await createTestExtension(t);
 	emitted.length = 0;
 
 	await fireLifecycle("session_start", { model: { provider: "xai", id: "grok-4.5" } });
 
 	const updates = usageCoreUpdates(emitted);
-	const state = updates[updates.length - 1].payload.state as UsageCoreState;
+	const state = updates.at(-1)!.payload.state as UsageCoreState;
 	assert.equal(state.provider, "xai");
 });
 
-test("emits ready event on session_start", async () => {
-	const { pi, emitted, fireLifecycle } = createPi();
-	createExtension(pi as any, createMockDeps());
+test("emits ready event on session_start", async (t) => {
+	const { emitted, fireLifecycle } = await createTestExtension(t);
 	emitted.length = 0;
 
 	await fireLifecycle("session_start", { model: { provider: "anthropic", id: "claude-sonnet-4" } });
@@ -115,36 +147,53 @@ test("emits ready event on session_start", async () => {
 	assert.equal(ready.length, 1);
 });
 
-test("turn_end does not force fetch (TTL fix)", async () => {
-	const { pi, fireLifecycle } = createPi();
+test("turn end does not fetch fresh usage", async (t) => {
 	let fetchCount = 0;
-	const deps = createMockDeps({
-		fetch: async () => {
-			fetchCount++;
-			return new Response(
-				JSON.stringify({
-					five_hour: { utilization: 10, resets_at: new Date(Date.now() + 3600000).toISOString() },
-					seven_day: { utilization: 20, resets_at: new Date(Date.now() + 86400000).toISOString() },
-				}),
-				{ status: 200 },
-			);
+	const { fireLifecycle } = await createTestExtension(
+		t,
+		anthropicDeps(() => fetchCount++),
+	);
+	const context = { model: { provider: "anthropic", id: "claude-sonnet-4" } };
+
+	await fireLifecycle("session_start", context);
+	await fireLifecycle("turn_end", context);
+
+	assert.equal(fetchCount, 1);
+});
+
+test("turn end fetches usage older than the TTL", async (t) => {
+	let fetchCount = 0;
+	const { fireLifecycle, advance } = await createTestExtension(
+		t,
+		anthropicDeps(() => fetchCount++),
+	);
+	const context = { model: { provider: "anthropic", id: "claude-sonnet-4" } };
+
+	await fireLifecycle("session_start", context);
+	advance(60_000);
+	await fireLifecycle("turn_end", context);
+
+	assert.equal(fetchCount, 2);
+});
+
+test("turn end respects the active provider backoff", async (t) => {
+	let fetchCount = 0;
+	const { cache, fireLifecycle } = await createTestExtension(
+		t,
+		anthropicDeps(() => fetchCount++),
+	);
+	await cache.fetchWithCache("anthropic", 60_000, async () => ({
+		usage: {
+			provider: "anthropic",
+			displayName: "Anthropic",
+			windows: [],
+			error: { code: "HTTP_ERROR", message: "rate limited" },
 		},
-		fileExists: (p: string) => p.includes("auth.json"),
-		readFile: (p: string) => {
-			if (p.includes("auth.json")) return JSON.stringify({ anthropic: { access: "test-token" } });
-			return undefined;
-		},
-	});
+	}));
+	const context = { model: { provider: "anthropic", id: "claude-sonnet-4" } };
 
-	createExtension(pi as any, deps);
+	await fireLifecycle("session_start", context);
+	await fireLifecycle("turn_end", context);
 
-	// session_start + model_select will trigger initial fetches.
-	await fireLifecycle("session_start", { model: { provider: "anthropic", id: "claude-sonnet-4" } });
-	await fireLifecycle("model_select", { model: { provider: "anthropic", id: "claude-sonnet-4" } });
-	const fetchCountAfterInit = fetchCount;
-
-	// turn_end should NOT fetch again (cache is fresh).
-	await fireLifecycle("turn_end", { model: { provider: "anthropic", id: "claude-sonnet-4" } });
-
-	assert.equal(fetchCount, fetchCountAfterInit, "turn_end should not trigger a new fetch when cache is fresh");
+	assert.equal(fetchCount, 0);
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-07-24
+
+### Fixed
+
+- Refresh provider usage properly when changing between models
+
 ## [0.3.0] - 2026-07-20
 
 ### Added

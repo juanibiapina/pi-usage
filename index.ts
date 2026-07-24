@@ -17,7 +17,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { fetchWithCache, getGoodUsage, watchCache } from "./src/cache.js";
+import { type CacheOperations, productionCache } from "./src/cache.js";
 import { createDefaultDependencies } from "./src/dependencies.js";
 import { detectProvider } from "./src/detection.js";
 import { createProvider, hasCredentials } from "./src/registry.js";
@@ -28,7 +28,11 @@ const REFRESH_INTERVAL_MS = 60_000;
 type GlobalGuard = { active: boolean };
 const global = globalThis as typeof globalThis & { __piUsage?: GlobalGuard };
 
-export default function createExtension(pi: ExtensionAPI, deps?: Dependencies): void {
+export default function createExtension(
+	pi: ExtensionAPI,
+	deps?: Dependencies,
+	cache: CacheOperations = productionCache,
+): void {
 	const resolvedDeps = deps ?? createDefaultDependencies();
 	// Prevent double-init when bundled alongside other extensions.
 	// Skip the guard when deps are explicitly provided (test mode).
@@ -53,7 +57,7 @@ export default function createExtension(pi: ExtensionAPI, deps?: Dependencies): 
 
 	function setupCacheWatch(provider: ProviderName): void {
 		stopCacheWatch?.();
-		stopCacheWatch = watchCache(provider, (usage: UsageSnapshot) => {
+		stopCacheWatch = cache.watchCache(provider, (usage: UsageSnapshot) => {
 			if (currentProvider === provider) {
 				emitState({ provider, usage });
 			}
@@ -85,7 +89,7 @@ export default function createExtension(pi: ExtensionAPI, deps?: Dependencies): 
 
 		// Check cache first (unless forced).
 		if (!force) {
-			const cached = getGoodUsage(detected, REFRESH_INTERVAL_MS);
+			const cached = cache.getGoodUsage(detected, REFRESH_INTERVAL_MS);
 			if (cached) {
 				emitState({ provider: detected, usage: cached });
 				return;
@@ -93,7 +97,7 @@ export default function createExtension(pi: ExtensionAPI, deps?: Dependencies): 
 		}
 
 		const providerInstance = createProvider(detected);
-		const usage = await fetchWithCache(detected, REFRESH_INTERVAL_MS, () =>
+		const usage = await cache.fetchWithCache(detected, REFRESH_INTERVAL_MS, () =>
 			providerInstance.fetchUsage(resolvedDeps),
 		);
 
@@ -133,7 +137,7 @@ export default function createExtension(pi: ExtensionAPI, deps?: Dependencies): 
 
 	pi.on("turn_end", async (_event, ctx) => {
 		// Respect TTL — this is the fix for pi-sub#58.
-		lastContext = ctx;
+		await refresh(ctx);
 	});
 
 	pi.on("session_switch" as any, async (_event: unknown, ctx: ExtensionContext) => {
