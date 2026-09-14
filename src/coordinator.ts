@@ -135,9 +135,9 @@ export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinator
 			return lease;
 		} catch {
 			const existing = readLease(provider);
-			if (existing && existing.expiresAt > acquiredAt) return undefined;
+			if (!existing || existing.expiresAt > acquiredAt) return undefined;
 
-			const stale = `${target}.${existing?.token ?? randomUUID()}.stale`;
+			const stale = `${target}.${existing.token}.stale`;
 			try {
 				fs.renameSync(target, stale);
 				fs.writeFileSync(target, serialized, { encoding: "utf-8", flag: "wx", mode: 0o600 });
@@ -160,12 +160,14 @@ export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinator
 	async function waitForOwner(provider: ProviderName, policy: ProviderRefreshPolicy): Promise<boolean> {
 		const waitUntil = Date.now() + Math.max(LEASE_MINIMUM_MS, policy.maxFetchMs + LEASE_MARGIN_MS) + LEASE_MARGIN_MS;
 		while (Date.now() < waitUntil) {
+			if (!fs.existsSync(leasePath(provider))) return true;
 			const lease = readLease(provider);
-			if (!lease || lease.expiresAt <= now()) return true;
+			if (lease && lease.expiresAt <= now()) return true;
 			await delay(WAIT_POLL_MS);
 		}
+		if (!fs.existsSync(leasePath(provider))) return true;
 		const lease = readLease(provider);
-		return !lease || lease.expiresAt <= now();
+		return Boolean(lease && lease.expiresAt <= now());
 	}
 
 	function freshResolution(
@@ -237,7 +239,11 @@ export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinator
 
 				const lease = acquireLease(provider, policy);
 				if (!lease) {
-					if (await waitForOwner(provider, policy)) continue;
+					if (await waitForOwner(provider, policy)) {
+						const settled = resolveFromState(readState(provider), policy, now());
+						if (settled) return settled;
+						continue;
+					}
 					return blockedResolution(readState(provider), "lease-timeout", now());
 				}
 
