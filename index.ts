@@ -6,8 +6,7 @@
  *   - "usage-core:update-current" → { state: UsageCoreState }
  */
 
-import { join } from "node:path";
-import { type ExtensionAPI, type ExtensionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createUsageCoordinator, getUsageStateDir, type UsageCoordinator } from "./src/coordinator.js";
 import { createDefaultDependencies } from "./src/dependencies.js";
 import { detectProvider } from "./src/detection.js";
@@ -17,10 +16,7 @@ import type { Dependencies, ProviderFetchResult, ProviderName, UsageCoreState, U
 
 type GlobalGuard = { active: boolean };
 const global = globalThis as typeof globalThis & { __piUsage?: GlobalGuard };
-const productionUsageCoordinator = createUsageCoordinator({
-	dir: getUsageStateDir(),
-	legacyDirs: [join(getAgentDir(), "cache", "pi-usage")],
-});
+const productionUsageCoordinator = createUsageCoordinator({ dir: getUsageStateDir() });
 
 function stateFromResolution(provider: ProviderName, resolution: UsageResolution): UsageCoreState {
 	if (resolution.availability === "available") {

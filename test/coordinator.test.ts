@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,26 +38,6 @@ function usage(percent: number): UsageSnapshot {
 		windows: [{ label: "5h", usedPercent: percent }],
 	};
 }
-
-test("fresh legacy agent-directory data migrates before endpoint access", async (t) => {
-	const root = await mkdtemp(join(tmpdir(), "pi-usage-migration-"));
-	t.after(() => rm(root, { recursive: true, force: true }));
-	const dir = join(root, "machine");
-	const legacyDir = join(root, "agent", "cache", "pi-usage");
-	await mkdir(legacyDir, { recursive: true });
-	await writeFile(join(legacyDir, "cache-anthropic.json"), JSON.stringify({ fetchedAt: 90_000, usage: usage(10) }));
-	let fetchCount = 0;
-	const coordinator = createUsageCoordinator({ dir, legacyDirs: [legacyDir], now: () => 100_000 });
-
-	const result = await coordinator.resolve("anthropic", policy, async () => {
-		fetchCount += 1;
-		return { ok: true, usage: usage(99) };
-	});
-
-	assert.equal(fetchCount, 0);
-	assert.equal(result.availability, "available");
-	assert.deepEqual(result.availability === "available" ? result.usage : undefined, usage(10));
-});
 
 test("a successful result is shared throughout the freshness window", async (t) => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-usage-coordinator-"));

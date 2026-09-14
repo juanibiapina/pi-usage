@@ -43,7 +43,6 @@ export interface UsageCoordinator {
 
 export interface UsageCoordinatorOptions {
 	dir: string;
-	legacyDirs?: string[];
 	now?: () => number;
 }
 
@@ -65,11 +64,7 @@ function delay(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export function createUsageCoordinator({
-	dir,
-	legacyDirs = [],
-	now = Date.now,
-}: UsageCoordinatorOptions): UsageCoordinator {
+export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinatorOptions): UsageCoordinator {
 	const statePath = (provider: ProviderName) => path.join(dir, `provider-${provider}.json`);
 	const leasePath = (provider: ProviderName) => path.join(dir, `provider-${provider}.lock`);
 
@@ -97,64 +92,6 @@ export function createUsageCoordinator({
 		const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
 		fs.writeFileSync(temporary, JSON.stringify(state, null, "\t"), { encoding: "utf-8", mode: 0o600 });
 		fs.renameSync(temporary, target);
-	}
-
-	function legacyCachePath(legacyDir: string, provider: ProviderName): string {
-		return path.join(legacyDir, `cache-${provider}.json`);
-	}
-
-	function legacyBackoffPath(legacyDir: string, provider: ProviderName): string {
-		return path.join(legacyDir, `backoff-${provider}`);
-	}
-
-	function hasLegacyState(provider: ProviderName): boolean {
-		return legacyDirs.some(
-			(legacyDir) =>
-				fs.existsSync(legacyCachePath(legacyDir, provider)) ||
-				fs.existsSync(legacyBackoffPath(legacyDir, provider)),
-		);
-	}
-
-	function migrateLegacyState(provider: ProviderName, current: ProviderState): ProviderState {
-		let next = current;
-		const migratedPaths: string[] = [];
-		for (const legacyDir of legacyDirs) {
-			const cacheFile = legacyCachePath(legacyDir, provider);
-			const legacyCache = readJson<{ fetchedAt?: number; usage?: UsageSnapshot }>(cacheFile);
-			if (
-				legacyCache?.usage &&
-				!legacyCache.usage.error &&
-				typeof legacyCache.fetchedAt === "number" &&
-				(!next.lastGood || legacyCache.fetchedAt > next.lastGood.fetchedAt)
-			) {
-				next = { ...next, lastGood: { fetchedAt: legacyCache.fetchedAt, usage: legacyCache.usage } };
-			}
-			if (fs.existsSync(cacheFile)) migratedPaths.push(cacheFile);
-
-			const backoffFile = legacyBackoffPath(legacyDir, provider);
-			try {
-				const retryAt = Number.parseInt(fs.readFileSync(backoffFile, "utf-8"), 10);
-				if (Number.isFinite(retryAt) && retryAt > (next.retry?.retryAt ?? 0)) {
-					next = {
-						...next,
-						retry: {
-							retryAt,
-							failedAt: Math.min(now(), retryAt),
-							error: { code: "UNKNOWN", message: "Migrated provider backoff" },
-						},
-					};
-				}
-				migratedPaths.push(backoffFile);
-			} catch {
-				// No legacy backoff exists.
-			}
-		}
-
-		if (migratedPaths.length > 0) {
-			writeState(provider, next);
-			for (const migratedPath of migratedPaths) fs.rmSync(migratedPath, { force: true });
-		}
-		return next;
 	}
 
 	function readLease(provider: ProviderName): ProviderLease | undefined {
@@ -277,9 +214,8 @@ export function createUsageCoordinator({
 			for (let attempt = 0; attempt < 2; attempt++) {
 				const observedAt = now();
 				const state = readState(provider);
-				const legacyPending = hasLegacyState(provider);
 				const existing = resolveFromState(state, policy, observedAt);
-				if (existing && !legacyPending) return existing;
+				if (existing) return existing;
 
 				const lease = acquireLease(provider, policy);
 				if (!lease) {
@@ -288,7 +224,7 @@ export function createUsageCoordinator({
 				}
 
 				try {
-					const protectedState = migrateLegacyState(provider, readState(provider));
+					const protectedState = readState(provider);
 					const protectedResult = resolveFromState(protectedState, policy, now());
 					if (protectedResult) return protectedResult;
 
