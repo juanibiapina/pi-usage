@@ -64,6 +64,24 @@ function delay(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function fetchWithin(
+	fetcher: () => Promise<ProviderFetchResult>,
+	maxFetchMs: number,
+): Promise<ProviderFetchResult> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<ProviderFetchResult>((resolve) => {
+		timer = setTimeout(
+			() => resolve({ ok: false, error: { code: "TIMEOUT", message: "Provider fetch timed out" } }),
+			Math.max(1, maxFetchMs),
+		);
+	});
+	try {
+		return await Promise.race([fetcher(), timeout]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinatorOptions): UsageCoordinator {
 	const statePath = (provider: ProviderName) => path.join(dir, `provider-${provider}.json`);
 	const leasePath = (provider: ProviderName) => path.join(dir, `provider-${provider}.lock`);
@@ -230,7 +248,7 @@ export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinator
 
 					let result: ProviderFetchResult;
 					try {
-						result = await fetcher();
+						result = await fetchWithin(fetcher, policy.maxFetchMs);
 					} catch (error) {
 						result = {
 							ok: false,
@@ -239,6 +257,10 @@ export function createUsageCoordinator({ dir, now = Date.now }: UsageCoordinator
 								message: error instanceof Error ? error.message : "Fetch failed",
 							},
 						};
+					}
+					const activeLease = readLease(provider);
+					if (activeLease?.token !== lease.token || activeLease.expiresAt <= now()) {
+						return blockedResolution(readState(provider), "lease-timeout", now());
 					}
 					if (result.ok) {
 						const fetchedAt = now();

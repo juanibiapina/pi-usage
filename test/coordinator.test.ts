@@ -174,6 +174,19 @@ test("a thrown provider failure preserves last-good usage and starts backoff", a
 	assert.deepEqual(result.availability === "available" ? result.usage : undefined, usage(10));
 });
 
+test("provider work is bounded by maxFetchMs", { timeout: 500 }, async (t) => {
+	const dir = await mkdtemp(join(tmpdir(), "pi-usage-coordinator-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const coordinator = createUsageCoordinator({ dir });
+	const shortPolicy = { ...policy, maxFetchMs: 20 };
+
+	const result = await coordinator.resolve("anthropic", shortPolicy, () => new Promise(() => {}));
+
+	assert.equal(result.availability, "unavailable");
+	assert.equal(result.availability === "unavailable" && result.reason, "fetch-failed");
+	assert.equal(result.error?.code, "TIMEOUT");
+});
+
 test("twenty Pi processes with different agent directories share one endpoint request", async (t) => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-usage-coordinator-"));
 	t.after(() => rm(dir, { recursive: true, force: true }));

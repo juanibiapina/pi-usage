@@ -26,8 +26,8 @@ function createPi() {
 		},
 	};
 
-	async function fireLifecycle(event: string, ctx: any = {}) {
-		for (const handler of lifecycleListeners.get(event) ?? []) await handler({}, ctx);
+	async function fireLifecycle(event: string, ctx: any = {}, eventData: any = {}) {
+		for (const handler of lifecycleListeners.get(event) ?? []) await handler(eventData, ctx);
 	}
 
 	return { pi, emitted, fireLifecycle };
@@ -103,6 +103,20 @@ test("session start resolves and announces current usage", async (t) => {
 	assert.equal(updates(emitted).at(-1)?.freshness, "fresh");
 	assert.equal(updates(emitted).at(-1)?.source, "endpoint");
 	assert.equal(emitted.filter((entry) => entry.event === "usage-core:ready").length, 1);
+});
+
+test("resumed sessions resolve their selected provider during session_start", async (t) => {
+	let fetchCount = 0;
+	const { emitted, fireLifecycle } = await createTestExtension(
+		t,
+		anthropicDeps(() => fetchCount++),
+	);
+
+	await fireLifecycle("session_start", anthropicContext, { type: "session_start", reason: "resume" });
+
+	assert.equal(fetchCount, 1);
+	assert.equal(updates(emitted).at(-1)?.provider, "anthropic");
+	assert.equal(updates(emitted).at(-1)?.availability, "available");
 });
 
 test("turn end resolves again but fresh state prevents another endpoint call", async (t) => {
