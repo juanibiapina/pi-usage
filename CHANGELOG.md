@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.0] - 2026-09-14
+
+### Added
+
+- Node.js consumers can read coordinated provider usage through a supported package interface.
+
 ## [0.4.0] - 2026-09-14
 
 ### Changed

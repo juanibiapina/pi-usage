@@ -56,6 +56,21 @@ Provider failures preserve the last successful snapshot. HTTP `Retry-After` supp
 pi install npm:@juanibiapina/pi-usage
 ```
 
+## Programmatic usage
+
+Node.js consumers running TypeScript through a compatible loader can read one
+provider on demand through the supported reader subpath:
+
+```ts
+import { getUsage } from "@juanibiapina/pi-usage/reader";
+
+const usage = await getUsage("anthropic");
+```
+
+`getUsage` returns a `UsageResolution`. It uses the same credential lookup,
+provider implementation, freshness window, retry deadline, filesystem lease,
+and last-good snapshot as the pi extension.
+
 ## Development
 
 ```bash

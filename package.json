@@ -1,6 +1,6 @@
 {
   "name": "@juanibiapina/pi-usage",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Pi extension that coordinates subscription usage across supported model providers.",
   "type": "module",
   "keywords": [
@@ -10,6 +10,10 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./reader": "./reader.ts"
   },
   "scripts": {
     "test": "node --test --import tsx test/*.test.ts",

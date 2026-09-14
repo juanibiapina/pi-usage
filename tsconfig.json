@@ -13,5 +13,5 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["index.ts", "src/**/*.ts", "test/**/*.ts"]
+  "include": ["index.ts", "reader.ts", "src/**/*.ts", "test/**/*.ts"]
 }

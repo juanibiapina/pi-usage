@@ -7,12 +7,11 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getUsage } from "./reader.js";
 import { createUsageCoordinator, getUsageStateDir, type UsageCoordinator } from "./src/coordinator.js";
-import { createDefaultDependencies } from "./src/dependencies.js";
 import { detectProvider } from "./src/detection.js";
-import { noCredentials } from "./src/errors.js";
-import { createProvider, getProviderRefreshPolicy, hasCredentials } from "./src/registry.js";
-import type { Dependencies, ProviderFetchResult, ProviderName, UsageCoreState, UsageResolution } from "./src/types.js";
+import { createUsageReader } from "./src/reader.js";
+import type { Dependencies, ProviderName, UsageCoreState, UsageResolution } from "./src/types.js";
 
 type GlobalGuard = { active: boolean };
 const global = globalThis as typeof globalThis & { __piUsage?: GlobalGuard };
@@ -48,7 +47,7 @@ export default function createExtension(
 	deps?: Dependencies,
 	coordinator: UsageCoordinator = productionUsageCoordinator,
 ): void {
-	const resolvedDeps = deps ?? createDefaultDependencies();
+	const readUsage = deps ? createUsageReader(deps, coordinator).getUsage : getUsage;
 	if (!deps && global.__piUsage?.active) return;
 	if (!deps) global.__piUsage = { active: true };
 
@@ -59,13 +58,6 @@ export default function createExtension(
 		pi.events.emit("usage-core:update-current", { state });
 	}
 
-	async function fetchProvider(provider: ProviderName): Promise<ProviderFetchResult> {
-		if (!hasCredentials(provider, resolvedDeps)) {
-			return { ok: false, error: noCredentials() };
-		}
-		return createProvider(provider).fetchUsage(resolvedDeps);
-	}
-
 	async function resolve(ctx: ExtensionContext): Promise<void> {
 		const provider = detectProvider(ctx.model);
 		if (!provider) {
@@ -73,9 +65,7 @@ export default function createExtension(
 			return;
 		}
 
-		const resolution = await coordinator.resolve(provider, getProviderRefreshPolicy(provider), () =>
-			fetchProvider(provider),
-		);
+		const resolution = await readUsage(provider);
 		emitState(stateFromResolution(provider, resolution));
 	}
 
