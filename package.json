@@ -1,6 +1,6 @@
 {
   "name": "@juanibiapina/pi-usage",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Pi extension that coordinates subscription usage across supported model providers.",
   "type": "module",
   "keywords": [
