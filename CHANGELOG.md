@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Subscription usage now refreshes after active turns without background polling, while local Pi processes share provider request limits, `Retry-After`, and the latest successful result.
+
 ## [0.3.1] - 2026-07-24
 
 ### Fixed

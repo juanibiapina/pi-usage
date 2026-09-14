@@ -42,14 +42,37 @@ export interface UsageSnapshot {
 	requestsEntitlement?: number;
 }
 
-/**
- * Result from a provider fetch. Includes the snapshot and optional retry
- * backoff parsed from the Retry-After header on error responses.
- */
-export interface FetchResult {
-	usage: UsageSnapshot;
-	retryAfterMs?: number;
+export interface ProviderRefreshPolicy {
+	freshForMs: number;
+	defaultBackoffMs: number;
+	maxFetchMs: number;
 }
+
+export type ProviderFetchResult =
+	| { ok: true; usage: UsageSnapshot }
+	| { ok: false; error: UsageError; retryAfterMs?: number };
+
+export type FetchResult = ProviderFetchResult;
+
+export type UsageResolution =
+	| {
+			availability: "available";
+			freshness: "fresh" | "stale";
+			source: "cache" | "endpoint";
+			usage: UsageSnapshot;
+			fetchedAt: number;
+			observedAt: number;
+			staleReason?: "no-credentials" | "backoff" | "fetch-failed" | "lease-timeout";
+			retryAt?: number;
+			error?: UsageError;
+	  }
+	| {
+			availability: "unavailable";
+			observedAt: number;
+			reason: "no-cache" | "no-credentials" | "backoff" | "fetch-failed" | "lease-timeout";
+			retryAt?: number;
+			error?: UsageError;
+	  };
 
 /**
  * State emitted by usage-core events.
@@ -57,6 +80,15 @@ export interface FetchResult {
 export interface UsageCoreState {
 	provider?: ProviderName;
 	usage?: UsageSnapshot;
+	availability?: "available" | "unavailable";
+	freshness?: "fresh" | "stale";
+	source?: "cache" | "endpoint";
+	fetchedAt?: number;
+	observedAt?: number;
+	staleReason?: "no-credentials" | "backoff" | "fetch-failed" | "lease-timeout";
+	reason?: "no-cache" | "no-credentials" | "backoff" | "fetch-failed" | "lease-timeout";
+	retryAt?: number;
+	error?: UsageError;
 }
 
 /**

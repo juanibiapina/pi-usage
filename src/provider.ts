@@ -29,6 +29,7 @@ export abstract class BaseProvider implements UsageProvider {
 	}
 
 	protected result(usage: UsageSnapshot, retryAfterMs?: number): FetchResult {
-		return { usage, retryAfterMs };
+		if (usage.error) return { ok: false, error: usage.error, retryAfterMs };
+		return { ok: true, usage };
 	}
 }
