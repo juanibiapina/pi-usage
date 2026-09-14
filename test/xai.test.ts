@@ -78,6 +78,8 @@ test("xai fetchUsage maps monthly + weekly windows", async () => {
 		}),
 	);
 
+	assert.equal(result.ok, true);
+	if (!result.ok) return;
 	assert.equal(result.usage.provider, "xai");
 	assert.equal(result.usage.displayName, "Grok");
 	assert.equal(result.usage.windows.length, 2);
@@ -106,6 +108,8 @@ test("xai fetchUsage defaults missing weekly percent to 0", async () => {
 		}),
 	);
 
+	assert.equal(result.ok, true);
+	if (!result.ok) return;
 	assert.equal(result.usage.windows.length, 1);
 	assert.equal(result.usage.windows[0]?.label, "Week");
 	assert.equal(result.usage.windows[0]?.usedPercent, 0);

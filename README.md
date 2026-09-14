@@ -1,39 +1,65 @@
 # pi-usage
 
-Pi extension that fetches subscription usage for all supported providers (Anthropic, Copilot, Gemini, Antigravity, Codex, Kiro, z.ai, xAI/Grok).
+Pi extension that fetches subscription usage for Anthropic, Copilot, Gemini, Antigravity, Codex, Kiro, z.ai, and xAI/Grok.
 
-Simplified fork of the excellent [@marckrenn/pi-sub-core](https://github.com/marckrenn/pi-sub). Keeps all providers, applies two bug fixes, drops features we don't need.
+## Behavior
 
-## Bug fixes
+Usage resolves when Pi starts a session, selects a model, or completes a turn. The extension has no recurring refresh timer.
 
-### Bedrock false positive detection
+All Pi processes owned by the same OS account on one machine share provider state, regardless of project or `PI_CODING_AGENT_DIR`. State uses the OS user cache directory:
 
-pi-sub-core's `detectProviderFromModel` falls back to matching model tokens (e.g. `"claude"`) when provider tokens don't match. This causes AWS Bedrock models (which run Claude but are billed separately) to be misidentified as Anthropic subscription usage. pi-usage only falls back to model tokens when no explicit provider is set.
+- Linux: `${XDG_CACHE_HOME:-$HOME/.cache}/pi-usage`
+- macOS: `$HOME/Library/Caches/pi-usage`
+- Windows: `%LOCALAPPDATA%\\pi-usage`
 
-### Aggressive refresh causing 429 flicker
+Each provider has an independent freshness window, lease, last-good snapshot, and retry deadline. The initial freshness window remains 60 seconds.
 
-pi-sub-core uses `force: true` on `turn_end` and `tool_result`, bypassing the cache TTL and hammering the usage APIs. Under load (multiple pi instances), this triggers 429s that cause the usage display to flicker. pi-usage always respects the cache TTL. See [marckrenn/pi-sub#58](https://github.com/marckrenn/pi-sub/issues/58).
+For every resolution:
 
-## Simplifications vs pi-sub-core
+1. Fresh cached usage returns without an endpoint call.
+2. Stale usage triggers one endpoint call when retry policy permits it.
+3. Concurrent local callers wait and receive the lease owner's result.
+4. `Retry-After` becomes an absolute deadline shared by every local Pi process.
+5. A failed refresh preserves last-good usage and marks it stale.
+6. A provider without last-good data returns unavailable.
 
-- No status page fetching
-- No settings UI or settings persistence
-- No tool registration
-- No `update-all` event (only `update-current`)
-- No provider cycle command
-- Self-contained types — no dependency on `@marckrenn/pi-sub-shared`
+Cached data inside the freshness window is fresh. Stale means refresh was due but could not complete.
+
+Coordination is per OS account and machine. Different machines do not share state.
 
 ## Events
 
 | Event | Payload | Description |
-|-------|---------|-------------|
-| `usage-core:ready` | `{ state: UsageCoreState }` | Emitted once on session start |
-| `usage-core:update-current` | `{ state: UsageCoreState }` | Emitted on usage changes |
+|---|---|---|
+| `usage-core:ready` | `{ state: UsageCoreState }` | Initial resolved state for the selected provider |
+| `usage-core:update-current` | `{ state: UsageCoreState }` | Result of each lifecycle-triggered resolution |
 
-`UsageCoreState` has an optional `provider` name and optional `usage` snapshot with rate windows. When `provider` is undefined, no known subscription provider was detected for the current model.
+`UsageCoreState` retains the existing `provider` and `usage` fields and adds:
+
+- `availability`: `available` or `unavailable`;
+- `freshness`: `fresh` or `stale` when usage is available;
+- `source`: `cache` or `endpoint`;
+- `fetchedAt` and `observedAt` timestamps;
+- optional `retryAt`, `staleReason`, and `error` fields.
+
+Consumers should keep stale usage visible unless their interface requires otherwise. An unavailable result has no usable snapshot.
+
+## Endpoint protection
+
+A provider endpoint call requires that provider's filesystem lease. A caller that cannot acquire the lease waits for the owner; timeout never grants permission to fetch without ownership.
+
+Provider failures preserve the last successful snapshot. HTTP `Retry-After` supports seconds and HTTP-date forms. Failures without a valid header use the provider's fallback backoff.
 
 ## Install
 
-```
+```bash
 pi install npm:@juanibiapina/pi-usage
+```
+
+## Development
+
+```bash
+npm install
+npm test
+npm run check
 ```

@@ -11,7 +11,7 @@ import { GeminiProvider } from "./providers/gemini.js";
 import { KiroProvider } from "./providers/kiro.js";
 import { XaiProvider } from "./providers/xai.js";
 import { ZaiProvider } from "./providers/zai.js";
-import type { Dependencies, ProviderName } from "./types.js";
+import type { Dependencies, ProviderName, ProviderRefreshPolicy } from "./types.js";
 
 const FACTORIES: Record<ProviderName, () => UsageProvider> = {
 	anthropic: () => new AnthropicProvider(),
@@ -26,6 +26,20 @@ const FACTORIES: Record<ProviderName, () => UsageProvider> = {
 
 export function createProvider(name: ProviderName): UsageProvider {
 	return FACTORIES[name]();
+}
+
+const DEFAULT_POLICY: ProviderRefreshPolicy = {
+	freshForMs: 60_000,
+	defaultBackoffMs: 60_000,
+	maxFetchMs: 10_000,
+};
+
+const POLICIES: Record<ProviderName, ProviderRefreshPolicy> = Object.fromEntries(
+	Object.keys(FACTORIES).map((name) => [name, { ...DEFAULT_POLICY }]),
+) as Record<ProviderName, ProviderRefreshPolicy>;
+
+export function getProviderRefreshPolicy(name: ProviderName): ProviderRefreshPolicy {
+	return POLICIES[name];
 }
 
 export function hasCredentials(name: ProviderName, deps: Dependencies): boolean {
