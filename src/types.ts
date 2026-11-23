@@ -31,6 +31,11 @@ export interface RateWindow {
 	usedPercent: number;
 	resetDescription?: string;
 	resetAt?: string;
+	/** Absolute amounts behind `usedPercent`, for providers that report them. */
+	used?: number;
+	limit?: number;
+	/** Charges accrued beyond the plan allowance. */
+	overage?: { charges: number; currency: string };
 }
 
 export interface UsageSnapshot {

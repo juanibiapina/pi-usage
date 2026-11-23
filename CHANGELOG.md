@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Usage windows can carry absolute `used`/`limit` amounts and an `overage` charge. Kiro reports both.
+
 ### Fixed
 
 - Kiro usage is read from the Kiro management API with Pi's stored Kiro login instead of scraping `kiro-cli chat /usage`, which reported 0% whenever the CLI answered in prose. Usage above the plan allowance is no longer hidden, and failures are reported instead of showing 0%.

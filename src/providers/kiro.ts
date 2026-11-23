@@ -28,6 +28,8 @@ interface UsageBreakdown {
 	usageLimit?: number;
 	usageLimitWithPrecision?: number;
 	nextDateReset?: number | string;
+	overageCharges?: number;
+	currency?: string;
 }
 
 interface UsageLimitsResponse {
@@ -128,6 +130,12 @@ function creditWindow(data: UsageLimitsResponse): RateWindow | undefined {
 		usedPercent: Math.max(0, (used / limit) * 100),
 		resetDescription: resetDate ? formatReset(resetDate) : undefined,
 		resetAt: resetDate?.toISOString(),
+		used,
+		limit,
+		overage:
+			typeof bucket.overageCharges === "number" && bucket.overageCharges > 0
+				? { charges: bucket.overageCharges, currency: bucket.currency || "USD" }
+				: undefined,
 	};
 }
 

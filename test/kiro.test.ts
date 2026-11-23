@@ -39,6 +39,8 @@ const usage = {
 			currentUsageWithPrecision: 7748.34,
 			usageLimitWithPrecision: 5000,
 			nextDateReset: 1796083200,
+			overageCharges: 109.93,
+			currency: "USD",
 		},
 	],
 };
@@ -52,6 +54,9 @@ test("kiro reports credit usage from the management API, uncapped", async () => 
 	assert.equal(window.label, "Credits");
 	assert.ok(Math.abs(window.usedPercent - 154.9668) < 0.001);
 	assert.equal(window.resetAt, "2026-12-01T00:00:00.000Z");
+	assert.equal(window.used, 7748.34);
+	assert.equal(window.limit, 5000);
+	assert.deepEqual(window.overage, { charges: 109.93, currency: "USD" });
 	assert.ok(urls[0].startsWith("https://management.eu-central-1.kiro.dev/ListAvailableProfiles"));
 	assert.ok(urls[1].includes(`profileArn=${encodeURIComponent(ARN)}`));
 });
@@ -116,4 +121,13 @@ test("kiro uses a stored profileArn without listing profiles", async () => {
 	assert.equal(result.ok, true);
 	assert.equal(urls.length, 1);
 	assert.ok(urls[0].includes("Get-Usage-Limits"));
+});
+
+test("kiro omits overage when none is charged", async () => {
+	const within = {
+		usageBreakdownList: [{ resourceType: "CREDIT", currentUsage: 10, usageLimit: 5000, overageCharges: 0 }],
+	};
+	const result = await new KiroProvider().fetchUsage(createDeps({ usage: within }).deps);
+	assert.equal(result.ok, true);
+	if (result.ok) assert.equal(result.usage.windows[0].overage, undefined);
 });
