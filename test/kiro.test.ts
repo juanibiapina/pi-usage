@@ -123,6 +123,45 @@ test("kiro uses a stored profileArn without listing profiles", async () => {
 	assert.ok(urls[0].includes("Get-Usage-Limits"));
 });
 
+test("kiro queries the stored profileArn's region, not the login region", async () => {
+	const { deps, urls } = createDeps({
+		usage,
+		auth: { kiro: { access: "tok", region: "eu-west-1", profileArn: ARN } },
+	});
+	const result = await new KiroProvider().fetchUsage(deps);
+	assert.equal(result.ok, true);
+	assert.ok(urls[0].startsWith("https://management.eu-central-1.kiro.dev/Get-Usage-Limits"));
+});
+
+test("kiro sends tokentype EXTERNAL_IDP only for external IdP tokens", async () => {
+	const jwt = (aud: string) => ["e30", Buffer.from(JSON.stringify({ aud })).toString("base64url"), "sig"].join(".");
+	const tokenTypes = async (access: string) => {
+		const seen: Array<string | undefined> = [];
+		const { deps } = createDeps({ usage, auth: { kiro: { access, region: "eu-central-1" } } });
+		const fetch = deps.fetch;
+		deps.fetch = async (input, init) => {
+			seen.push(new Headers(init?.headers).get("tokentype") ?? undefined);
+			return fetch(input, init);
+		};
+		await new KiroProvider().fetchUsage(deps);
+		return seen;
+	};
+	assert.deepEqual(await tokenTypes(jwt("api://kiro")), ["EXTERNAL_IDP", "EXTERNAL_IDP"]);
+	assert.deepEqual(await tokenTypes(jwt("other")), [undefined, undefined]);
+	assert.deepEqual(await tokenTypes("opaque-sso-token"), [undefined, undefined]);
+});
+
+test("kiro without any profile is a fetch failure, not an HTTP error", async () => {
+	const { deps } = createDeps();
+	deps.fetch = async () => Response.json({ profiles: [] });
+	const result = await new KiroProvider().fetchUsage(deps);
+	assert.equal(result.ok, false);
+	if (!result.ok) {
+		assert.equal(result.error.code, "FETCH_FAILED");
+		assert.equal(result.error.httpStatus, undefined);
+	}
+});
+
 test("kiro omits overage when none is charged", async () => {
 	const within = {
 		usageBreakdownList: [{ resourceType: "CREDIT", currentUsage: 10, usageLimit: 5000, overageCharges: 0 }],

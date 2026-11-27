@@ -10,6 +10,10 @@
 
 - Kiro usage is read from the Kiro management API with Pi's stored Kiro login instead of scraping `kiro-cli chat /usage`, which reported 0% whenever the CLI answered in prose. Usage above the plan allowance is no longer hidden, and failures are reported instead of showing 0%.
 
+### Changed
+
+- Kiro usage now requires a Kiro login stored by Pi in `~/.pi/agent/auth.json`. A login that exists only in `kiro-cli` no longer shows Kiro usage. The `kiro-cli` path was already broken since kiro-cli 3.5.0, which no longer handles `/usage` in non-interactive mode, so it showed 0% regardless of real usage.
+
 ## [0.5.0] - 2026-09-14
 
 ### Added

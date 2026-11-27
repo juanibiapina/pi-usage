@@ -13,6 +13,7 @@ import type { Dependencies, FetchResult, RateWindow } from "../types.js";
 import { API_TIMEOUT_MS, createTimeoutController, formatReset, parseRetryAfter } from "../utils.js";
 
 const FALLBACK_REGIONS = ["us-east-1", "eu-central-1"];
+const EXTERNAL_IDP_AUDIENCE = "api://kiro";
 
 interface KiroAuth {
 	access: string;
@@ -59,9 +60,23 @@ function managementUrl(region: string, endpoint: string): URL {
 	return new URL(endpoint, `https://management.${region}.kiro.dev/`);
 }
 
+/** External IdP (enterprise OIDC) tokens are JWTs for this audience; AWS SSO and desktop tokens are opaque. */
+function isExternalIdpToken(token: string): boolean {
+	const segments = token.split(".");
+	if (segments.length !== 3 || !segments[1]) return false;
+	try {
+		const payload = JSON.parse(Buffer.from(segments[1], "base64url").toString("utf-8")) as { aud?: unknown };
+		return payload.aud === EXTERNAL_IDP_AUDIENCE;
+	} catch {
+		return false;
+	}
+}
+
 function authHeaders(token: string): Record<string, string> {
 	const headers: Record<string, string> = { Accept: "application/json", Authorization: `Bearer ${token}` };
+	// Management answers 403 "Invalid token" for these token kinds without the matching tokentype.
 	if (token.startsWith("ksk_")) headers.tokentype = "API_KEY";
+	else if (isExternalIdpToken(token)) headers.tokentype = "EXTERNAL_IDP";
 	return headers;
 }
 
@@ -74,12 +89,20 @@ async function timedFetch(deps: Dependencies, url: URL, init: RequestInit): Prom
 	}
 }
 
-/** The profile lives in one region; probe the login region first, then the canonical ones. */
+/** arn:aws:codewhisperer:<region>:<account>:profile/<id> */
+function arnRegion(arn: string): string | undefined {
+	return arn.split(":")[3] || undefined;
+}
+
+/**
+ * The profile lives in one region, which can differ from the login (SSO) region.
+ * A stored ARN names its region; otherwise probe the login region first, then the canonical ones.
+ */
 async function resolveProfile(
 	deps: Dependencies,
 	auth: KiroAuth,
-): Promise<{ region: string; arn: string } | { response: Response }> {
-	if (auth.profileArn) return { region: auth.region, arn: auth.profileArn };
+): Promise<{ region: string; arn: string } | { response: Response } | undefined> {
+	if (auth.profileArn) return { region: arnRegion(auth.profileArn) ?? auth.region, arn: auth.profileArn };
 	const regions = [...new Set([auth.region, ...FALLBACK_REGIONS])];
 	let lastFailure: Response | undefined;
 	for (const region of regions) {
@@ -100,7 +123,7 @@ async function resolveProfile(
 			// Unreachable region says nothing about the token; try the next one.
 		}
 	}
-	return { response: lastFailure ?? new Response(null, { status: 502 }) };
+	return lastFailure ? { response: lastFailure } : undefined;
 }
 
 function toDate(value: number | string | undefined): Date | undefined {
@@ -157,6 +180,7 @@ export class KiroProvider extends BaseProvider {
 
 		try {
 			const profile = await resolveProfile(deps, auth);
+			if (!profile) return this.result(this.emptySnapshot(fetchFailed("No Kiro profile found")));
 			if ("response" in profile) {
 				return this.result(
 					this.emptySnapshot(httpError(profile.response.status)),
