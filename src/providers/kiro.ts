@@ -7,7 +7,7 @@
  */
 
 import * as path from "path";
-import { fetchFailed, httpError, noCredentials, notLoggedIn } from "../errors.js";
+import { fetchFailed, httpError, noCredentials } from "../errors.js";
 import { BaseProvider } from "../provider.js";
 import type { Dependencies, FetchResult, RateWindow } from "../types.js";
 import { API_TIMEOUT_MS, createTimeoutController, formatReset, parseRetryAfter } from "../utils.js";
@@ -19,8 +19,14 @@ interface KiroAuth {
 	access: string;
 	region: string;
 	profileArn?: string;
-	expires?: number;
 }
+
+interface KiroProfile {
+	region: string;
+	arn: string;
+}
+
+let probedProfile: { access: string; profile: KiroProfile } | undefined;
 
 interface UsageBreakdown {
 	resourceType?: string;
@@ -49,7 +55,6 @@ function loadKiroAuth(deps: Dependencies): KiroAuth | undefined {
 			access: entry.access,
 			region: typeof entry.region === "string" && entry.region ? entry.region : "us-east-1",
 			profileArn: typeof entry.profileArn === "string" ? entry.profileArn : undefined,
-			expires: typeof entry.expires === "number" ? entry.expires : undefined,
 		};
 	} catch {
 		return undefined;
@@ -101,8 +106,9 @@ function arnRegion(arn: string): string | undefined {
 async function resolveProfile(
 	deps: Dependencies,
 	auth: KiroAuth,
-): Promise<{ region: string; arn: string } | { response: Response } | undefined> {
+): Promise<KiroProfile | { response: Response } | undefined> {
 	if (auth.profileArn) return { region: arnRegion(auth.profileArn) ?? auth.region, arn: auth.profileArn };
+	if (probedProfile?.access === auth.access) return probedProfile.profile;
 	const regions = [...new Set([auth.region, ...FALLBACK_REGIONS])];
 	let lastFailure: Response | undefined;
 	for (const region of regions) {
@@ -118,7 +124,10 @@ async function resolveProfile(
 			}
 			const data = (await res.json()) as { profiles?: Array<{ arn?: string }> };
 			const arn = data.profiles?.find((profile) => profile.arn)?.arn;
-			if (arn) return { region, arn };
+			if (arn) {
+				probedProfile = { access: auth.access, profile: { region, arn } };
+				return probedProfile.profile;
+			}
 		} catch {
 			// Unreachable region says nothing about the token; try the next one.
 		}
@@ -138,7 +147,7 @@ function creditWindow(data: UsageLimitsResponse): RateWindow | undefined {
 		: data.usageBreakdown
 			? [data.usageBreakdown]
 			: [];
-	const bucket = buckets.find((b) => b.resourceType === "CREDIT") ?? buckets[0];
+	const bucket = buckets.find((b) => b.resourceType === "CREDIT");
 	if (!bucket) return undefined;
 
 	const used = bucket.currentUsageWithPrecision ?? bucket.currentUsage;
@@ -173,10 +182,6 @@ export class KiroProvider extends BaseProvider {
 	async fetchUsage(deps: Dependencies): Promise<FetchResult> {
 		const auth = loadKiroAuth(deps);
 		if (!auth) return this.result(this.emptySnapshot(noCredentials()));
-		// Pi refreshes the token on Kiro turns; an expired one cannot be refreshed here.
-		if (auth.expires !== undefined && auth.expires <= Date.now()) {
-			return this.result(this.emptySnapshot(notLoggedIn()));
-		}
 
 		try {
 			const profile = await resolveProfile(deps, auth);

@@ -5,12 +5,16 @@ import type { Dependencies } from "../src/types.js";
 
 const ARN = "arn:aws:codewhisperer:eu-central-1:123456789012:profile/TEST";
 
+let tokenCount = 0;
+const freshToken = () => `tok-${++tokenCount}`;
+
 function createDeps(options?: { auth?: unknown; usage?: unknown; usageStatus?: number }): {
 	deps: Dependencies;
 	urls: string[];
 } {
 	const urls: string[] = [];
-	const auth = options && "auth" in options ? options.auth : { kiro: { access: "tok", region: "eu-central-1" } };
+	const auth =
+		options && "auth" in options ? options.auth : { kiro: { access: freshToken(), region: "eu-central-1" } };
 	const deps: Dependencies = {
 		fetch: async (input: RequestInfo | URL) => {
 			const url = String(input);
@@ -72,17 +76,23 @@ test("kiro without credentials is NO_CREDENTIALS", async () => {
 	if (!result.ok) assert.equal(result.error.code, "NO_CREDENTIALS");
 });
 
-test("kiro with expired token is NOT_LOGGED_IN without a request", async () => {
-	const { deps, urls } = createDeps({ auth: { kiro: { access: "tok", region: "eu-central-1", expires: 1 } } });
-	const result = await new KiroProvider().fetchUsage(deps);
-	assert.equal(result.ok, false);
-	if (!result.ok) assert.equal(result.error.code, "NOT_LOGGED_IN");
-	assert.equal(urls.length, 0);
-});
-
 test("kiro unparseable usage is an error, not 0%", async () => {
 	const result = await new KiroProvider().fetchUsage(createDeps({ usage: {} }).deps);
 	assert.equal(result.ok, false);
+});
+
+test("kiro without a CREDIT bucket is an error", async () => {
+	const other = { usageBreakdownList: [{ resourceType: "AGENTIC_REQUEST", currentUsage: 10, usageLimit: 50 }] };
+	const result = await new KiroProvider().fetchUsage(createDeps({ usage: other }).deps);
+	assert.equal(result.ok, false);
+});
+
+test("kiro lists profiles once per token", async () => {
+	const { deps, urls } = createDeps({ usage });
+	await new KiroProvider().fetchUsage(deps);
+	const result = await new KiroProvider().fetchUsage(deps);
+	assert.equal(result.ok, true);
+	assert.equal(urls.filter((url) => url.includes("ListAvailableProfiles")).length, 1);
 });
 
 test("kiro surfaces HTTP errors", async () => {
@@ -106,7 +116,7 @@ test("kiro probes fallback regions when the login region has no profile", async 
 		if (url.includes("management.us-east-1.") && url.includes("Get-Usage-Limits")) return Response.json(usage);
 		return new Response("not found", { status: 404 });
 	};
-	deps.readFile = () => JSON.stringify({ kiro: { access: "tok", region: "eu-west-2" } });
+	deps.readFile = () => JSON.stringify({ kiro: { access: freshToken(), region: "eu-west-2" } });
 	const result = await new KiroProvider().fetchUsage(deps);
 	assert.equal(result.ok, true);
 	assert.ok(urls.at(-1)?.startsWith("https://management.us-east-1.kiro.dev/Get-Usage-Limits"));
@@ -115,7 +125,7 @@ test("kiro probes fallback regions when the login region has no profile", async 
 test("kiro uses a stored profileArn without listing profiles", async () => {
 	const { deps, urls } = createDeps({
 		usage,
-		auth: { kiro: { access: "tok", region: "eu-central-1", profileArn: ARN } },
+		auth: { kiro: { access: freshToken(), region: "eu-central-1", profileArn: ARN } },
 	});
 	const result = await new KiroProvider().fetchUsage(deps);
 	assert.equal(result.ok, true);
@@ -126,7 +136,7 @@ test("kiro uses a stored profileArn without listing profiles", async () => {
 test("kiro queries the stored profileArn's region, not the login region", async () => {
 	const { deps, urls } = createDeps({
 		usage,
-		auth: { kiro: { access: "tok", region: "eu-west-1", profileArn: ARN } },
+		auth: { kiro: { access: freshToken(), region: "eu-west-1", profileArn: ARN } },
 	});
 	const result = await new KiroProvider().fetchUsage(deps);
 	assert.equal(result.ok, true);
